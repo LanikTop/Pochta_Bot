@@ -1,6 +1,8 @@
 import logging
+import requests
 from telegram.ext import Application, MessageHandler, filters
-from telegram.ext import CommandHandler
+from telegram.ext import CommandHandler, Updater
+import asyncio
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
 import aiohttp
 from data import db_session
@@ -8,20 +10,24 @@ from data.users import User
 from message_script import send_message
 import datetime
 import sqlalchemy
+import schedule
 
 # logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
 
 logger = logging.getLogger(__name__)
 
 # GLOBAL PARAMS
-LIST_MESSAGE = ['Я уже готов отправить твоё письмо. Напиши его', 'Кому ты хочешь отправить сообщение? Введи его адресс']
+TOKEN = '6428776449:AAEgccz1sgB9y06_QVCDGFnTZoyU74f_GEg'
+LIST_MESSAGE = ['Я уже готов отправить твоё письмо. Напиши его', 'Кому ты хочешь отправить сообщение? Введи его адресс',
+                'А какой заголовок?']
 LIST_TIMERS = ['На какое число ты хочешь создать таймер?', 'Записал число, на какой час?(0-23)',
-               'Записал час, сколько минут(0-59)', 'Значит {} числа в {}:{}, какой текст написать вам?',
-               'Создал таймер. Всё будет сделано!', '123']
+               'Записал час, сколько минут(0-59)', 'Какой текст написать вам?',
+               'Создал таймер. Всё будет сделано!']
 
 
 async def start(update, context):
     """Отправляет сообщение когда получена команда /start"""
+    await context.bot.send_photo(update.message.chat_id, open(f'sprites\hello_world.png', 'rb'))
     user = update.effective_user
     await update.message.reply_html(
         rf"""Привет {user.mention_html()}! Я Почта_Бот. Я готов помогать тебе со многими важными задачами
@@ -34,13 +40,29 @@ async def start(update, context):
     db_sess.commit()
 
 
+def job():
+    print(1)
+    db_sess = db_session.create_session()
+    for user in db_sess.query(User).all():
+        for timers in user.user_timers.split('-^system_separator_to_messages^-'):
+            timers = timers.split('-^system_separator^-')
+            if timers[0] == datetime.datetime.day and timers[1] == datetime.datetime.hour and timers[
+                2] == datetime.datetime.minute:
+                reminder(user.id, timers[3])
+
+
+def reminder(user, mes):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={user}&text={mes}"
+    print(requests.get(url).json())
+
+
 async def help_command(update, context):
     """Отправляет сообщение когда получена команда /help"""
     await update.message.reply_text("""Привет, я Почти_Бот. Во мне включены(пока нет) 2 очень важные функции.
-    Во первых, я твоя личная почта, не такая продвинутая как @gmail, @mail и другие, но всё же
-    Я могу(пока не могу) отправлять за тебя письма другим людям на любую почту, оповещать тебя о новых сообщениях и рассылках
-    Во вторых, я также могу(не могу) быть для тебя ботом-напоминалкой. Написать или позвонить тебе в нужное время, чтобы ты ничего не забыл.
-    Буду очень рад, если ты будешь мною пользоваться, удачи, Друг:)""")
+Во первых, я твоя личная почта, не такая продвинутая как @gmail, @mail и другие, но всё же
+Я могу(пока не могу) отправлять за тебя письма другим людям на любую почту, оповещать тебя о новых сообщениях и рассылках
+Во вторых, я также могу(не могу) быть для тебя ботом-напоминалкой. Написать или позвонить тебе в нужное время, чтобы ты ничего не забыл.
+Буду очень рад, если ты будешь мною пользоваться, удачи, Друг:)""")
 
 
 async def message(update, context):
@@ -66,7 +88,13 @@ async def user_timers(update, context):
     db_sess = db_session.create_session()
     for user in db_sess.query(User).all():
         if user.id == update.message.chat_id:
-            await update.message.reply_text(f'Ваши таймеры:{user.user_timers}')
+            timer = user.user_timers.split('-^system_separator_to_messages^-')
+            timers = ''
+            for elem in timer:
+                elem = elem.split('-^system_separator^-')
+                if len(elem) > 1:
+                    timers += f'\n{elem[0]} числа в {elem[1]} часов {elem[2]} минут'
+            await update.message.reply_text(f'Ваши таймеры:{timers}')
 
 
 async def create_timer(update, context):
@@ -119,14 +147,15 @@ async def text(update, context):
                     await update.message.reply_text((LIST_TIMERS[user.count_steps_timer]))
                     await return_to_start(update, context)
             if user.message_flag:
-                if user.count_steps_message < 2:
+                if user.count_steps_message < 3:
                     await update.message.reply_text((LIST_MESSAGE[user.count_steps_message]))
                     user.user_message += update.message.text + '-^system_separator^-'
                     user.count_steps_message += 1
                 else:
                     user.user_message += update.message.text
                     message_data = user.user_message.split('-^system_separator^-')
-                    await update.message.reply_text(send_message(message_data[0], message_data[1]))
+                    await update.message.reply_text(
+                        send_message(message_data[0], message_data[1], message_data[2]))
                     await return_to_start(update, context)
     db_sess.commit()
 
