@@ -3,8 +3,11 @@ import requests
 from telegram.ext import Application, MessageHandler, filters
 from telegram.ext import CommandHandler, Updater
 import asyncio
+import shutil
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
 import aiohttp
+import os
+import requests
 from data import db_session
 from data.users import User
 from message_script import send_message
@@ -19,7 +22,7 @@ logger = logging.getLogger(__name__)
 # GLOBAL PARAMS
 TOKEN = '6428776449:AAEgccz1sgB9y06_QVCDGFnTZoyU74f_GEg'
 LIST_MESSAGE = ['Я уже готов отправить твоё письмо. Напиши его', 'Кому ты хочешь отправить сообщение? Введи его адресс',
-                'А какой заголовок?']
+                'А какой заголовок?', 'Если ты хочешь отправить что-то ещё, скинь мне, а как закончишь, напиши (/send)']
 LIST_TIMERS = ['На какое число ты хочешь создать таймер?', 'Записал число, на какой час?(0-23)',
                'Записал час, сколько минут(0-59)', 'Какой текст написать вам?',
                'Создал таймер. Всё будет сделано!']
@@ -41,7 +44,6 @@ async def start(update, context):
 
 
 def job():
-    print(1)
     db_sess = db_session.create_session()
     for user in db_sess.query(User).all():
         for timers in user.user_timers.split('-^system_separator_to_messages^-'):
@@ -119,8 +121,33 @@ async def return_to_start(update, context):
             user.count_steps_timer = 1
             user.count_steps_message = 1
     db_sess.commit()
+    if os.path.isdir(fr'data/user_documents/{update.message.chat_id}'):
+        try:
+            shutil.rmtree(fr'data/user_documents/{update.message.chat_id}')
+        except Exception:
+            pass
     await update.message.reply_text(
         """Чтобы ты хотел сделать, отправить сообщение(/mes) или поставить таймер для себя (/time)""")
+
+
+async def downloader(update, context):
+    fileName = update.message.document.file_name
+    file = await context.bot.get_file(update.message.document)
+    if not os.path.isdir(fr'data/user_documents/{update.message.chat_id}'):
+        os.mkdir(fr'data/user_documents/{update.message.chat_id}')
+    with open(fr'data/user_documents/{update.message.chat_id}/{fileName}', 'wb+') as f:
+        response = requests.get(file.file_path)
+        f.write(response.content)
+
+
+async def send(update, context):
+    db_sess = db_session.create_session()
+    for user in db_sess.query(User).all():
+        if user.id == update.message.chat_id:
+            message_data = user.user_message.split('-^system_separator^-')
+            await update.message.reply_text(
+                send_message(message_data[0], message_data[1], message_data[2], update.message.chat_id))
+    await return_to_start(update, context)
 
 
 async def text(update, context):
@@ -130,14 +157,18 @@ async def text(update, context):
         if user.id == update.message.chat_id:
             if user.timer_flag:
                 try:
-                    if user.count_steps_timer == 1 and int(update.message.text) != float(update.message.text):
+                    if user.count_steps_timer == 1 and int(update.message.text) != float(update.message.text) or not (
+                            1 <= int(update.message.text) <= 31):
                         raise Exception
-                    if user.count_steps_timer == 2 and int(update.message.text) != float(update.message.text):
+                    if user.count_steps_timer == 2 and int(update.message.text) != float(update.message.text) or not (
+                            0 <= int(update.message.text) <= 23):
                         raise Exception
-                    if user.count_steps_timer == 3 and int(update.message.text) != float(update.message.text):
+                    if user.count_steps_timer == 3 and int(update.message.text) != float(update.message.text) or not (
+                            0 <= int(update.message.text) <= 59):
                         raise Exception
                 except Exception:
                     await update.message.reply_text(bad_input())
+                    await return_to_start(update, context)
                 if user.count_steps_timer < 4:
                     await update.message.reply_text((LIST_TIMERS[user.count_steps_timer]))
                     user.user_timers += update.message.text + '-^system_separator^-'
@@ -147,16 +178,12 @@ async def text(update, context):
                     await update.message.reply_text((LIST_TIMERS[user.count_steps_timer]))
                     await return_to_start(update, context)
             if user.message_flag:
-                if user.count_steps_message < 3:
+                if user.count_steps_message < 4:
                     await update.message.reply_text((LIST_MESSAGE[user.count_steps_message]))
                     user.user_message += update.message.text + '-^system_separator^-'
                     user.count_steps_message += 1
                 else:
-                    user.user_message += update.message.text
-                    message_data = user.user_message.split('-^system_separator^-')
-                    await update.message.reply_text(
-                        send_message(message_data[0], message_data[1], message_data[2]))
-                    await return_to_start(update, context)
+                    await update.message.reply_text((LIST_MESSAGE[user.count_steps_message]))
     db_sess.commit()
 
 
@@ -174,6 +201,8 @@ def main():
     application.add_handler(CommandHandler("newtime", create_timer))
     application.add_handler(CommandHandler("back", return_to_start))
     application.add_handler(CommandHandler("mytime", user_timers))
+    application.add_handler(CommandHandler("send", send))
+    application.add_handler(MessageHandler(filters.Document.ALL, downloader))
     db_session.global_init("db/blogs.db")
     application.run_polling()
 
