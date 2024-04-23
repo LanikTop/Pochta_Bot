@@ -55,7 +55,7 @@ def job():
 
 def reminder(user, mes):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={user}&text={mes}"
-    print(requests.get(url).json())
+    # print(requests.get(url).json())
 
 
 async def help_command(update, context):
@@ -77,6 +77,11 @@ async def message(update, context):
             user.timer_flag = False
     db_sess.commit()
     await update.message.reply_text(LIST_MESSAGE[0])
+
+
+async def check_time_every_minute():
+    while True:
+        schedule.run_pending()
 
 
 async def timer_about(update, context):
@@ -204,8 +209,12 @@ def main():
     application.add_handler(CommandHandler("send", send))
     application.add_handler(MessageHandler(filters.Document.ALL, downloader))
     db_session.global_init("db/blogs.db")
+    #schedule.every().hour.at(":00").do(job)
     application.run_polling()
 
 
 if __name__ == '__main__':
+    #loop = asyncio.get_event_loop()
+    #loop.run_forever()
+    #https://github.com/python-telegram-bot/python-telegram-bot/issues/3745
     main()
