@@ -1,0 +1,12 @@
+os
+requests
+logging
+asyncio
+shutil
+telegram.ext
+schedule
+datetime
+sqlalchemy
+smtplib
+pathlib
+email
