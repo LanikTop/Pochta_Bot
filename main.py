@@ -23,9 +23,9 @@ logger = logging.getLogger(__name__)
 TOKEN = '6428776449:AAEgccz1sgB9y06_QVCDGFnTZoyU74f_GEg'
 LIST_MESSAGE = ['Я уже готов отправить твоё письмо. Напиши его', 'Кому ты хочешь отправить сообщение? Введи его адресс',
                 'А какой заголовок?', 'Если ты хочешь отправить что-то ещё, скинь мне, а как закончишь, напиши (/send)']
-LIST_TIMERS = ['На какое число ты хочешь создать таймер?', 'Записал число, на какой час?(0-23)',
-               'Записал час, сколько минут(0-59)', 'Какой текст написать вам?',
-               'Создал таймер. Всё будет сделано!']
+LIST_TIMERS = ['На какое число ты хочешь создать напоминание?', 'Записал число, на какой час?',
+               'Записал час, сколько минут', 'Какой текст написать вам?',
+               'Создал напоминание. Всё будет сделано!']
 
 
 async def start(update, context):
@@ -34,7 +34,7 @@ async def start(update, context):
     user = update.effective_user
     await update.message.reply_html(
         rf"""Привет {user.mention_html()}! Я Почта_Бот. Я готов помогать тебе со многими важными задачами
-Чтобы ты хотел сделать, отправить сообщение(/mes) или поставить таймер для себя (/time)""")
+Чтобы ты хотел сделать, отправить сообщение(/mes) или поставить напоминание для себя (/time)""")
     db_sess = db_session.create_session()
     new_user = User()
     new_user.id = update.message.chat_id
@@ -60,10 +60,10 @@ def reminder(user, mes):
 
 async def help_command(update, context):
     """Отправляет сообщение когда получена команда /help"""
-    await update.message.reply_text("""Привет, я Почти_Бот. Во мне включены(пока нет) 2 очень важные функции.
+    await update.message.reply_text("""Привет, я Почти_Бот. Во мне включены 2 очень важные функции.
 Во первых, я твоя личная почта, не такая продвинутая как @gmail, @mail и другие, но всё же
-Я могу(пока не могу) отправлять за тебя письма другим людям на любую почту, оповещать тебя о новых сообщениях и рассылках
-Во вторых, я также могу(не могу) быть для тебя ботом-напоминалкой. Написать или позвонить тебе в нужное время, чтобы ты ничего не забыл.
+Я могу отправлять за тебя письма другим людям на любую почту.
+Во вторых, я также могу быть для тебя ботом-заметками. Написать для тебя напоминание, чтобы ты ничего не забыл.
 Буду очень рад, если ты будешь мною пользоваться, удачи, Друг:)""")
 
 
@@ -87,7 +87,7 @@ async def check_time_every_minute():
 async def timer_about(update, context):
     """Отправляет сообщение когда получена команда /time"""
     await update.message.reply_text(
-        """Я уже готов создать для тебя новый таймер(/newtime) или открыть уже созданнные тобой(/mytime)""")
+        """Я уже готов создать для тебя новое напоминание(/newtime) или открыть уже созданнные тобой(/mytime)""")
 
 
 async def user_timers(update, context):
@@ -100,8 +100,8 @@ async def user_timers(update, context):
             for elem in timer:
                 elem = elem.split('-^system_separator^-')
                 if len(elem) > 1:
-                    timers += f'\n{elem[0]} числа в {elem[1]} часов {elem[2]} минут'
-            await update.message.reply_text(f'Ваши таймеры:{timers}')
+                    timers += f'\n{elem[0]} числа в {elem[1]} часов {elem[2]} минут: {elem[3]}'
+            await update.message.reply_text(f'Ваши напоминания:{timers}')
 
 
 async def create_timer(update, context):
@@ -132,7 +132,7 @@ async def return_to_start(update, context):
         except Exception:
             pass
     await update.message.reply_text(
-        """Чтобы ты хотел сделать, отправить сообщение(/mes) или поставить таймер для себя (/time)""")
+        """Чтобы ты хотел сделать, отправить сообщение(/mes) или поставить напоминание для себя (/time)""")
 
 
 async def downloader(update, context):
@@ -161,19 +161,6 @@ async def text(update, context):
     for user in db_sess.query(User).all():
         if user.id == update.message.chat_id:
             if user.timer_flag:
-                try:
-                    if user.count_steps_timer == 1 and int(update.message.text) != float(update.message.text) or not (
-                            1 <= int(update.message.text) <= 31):
-                        raise Exception
-                    if user.count_steps_timer == 2 and int(update.message.text) != float(update.message.text) or not (
-                            0 <= int(update.message.text) <= 23):
-                        raise Exception
-                    if user.count_steps_timer == 3 and int(update.message.text) != float(update.message.text) or not (
-                            0 <= int(update.message.text) <= 59):
-                        raise Exception
-                except Exception:
-                    await update.message.reply_text(bad_input())
-                    await return_to_start(update, context)
                 if user.count_steps_timer < 4:
                     await update.message.reply_text((LIST_TIMERS[user.count_steps_timer]))
                     user.user_timers += update.message.text + '-^system_separator^-'
